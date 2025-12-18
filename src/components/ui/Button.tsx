@@ -1,9 +1,10 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
 import { Loader2 } from 'lucide-react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline' | 'success';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
 }
@@ -16,6 +17,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       ghost: 'bg-transparent hover:bg-slate-800/50 text-slate-300 hover:text-white border-transparent',
       destructive: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/50',
       outline: 'bg-transparent border border-slate-600 text-slate-300 hover:border-slate-400 hover:text-white',
+      success: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/50',
     };
 
     const sizes = {
@@ -25,10 +27,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     return (
-      <button
+      <motion.button
         ref={ref}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
         className={cn(
-          'inline-flex items-center justify-center rounded-lg transition-all duration-200 border disabled:opacity-50 disabled:cursor-not-allowed active:scale-95',
+          'inline-flex items-center justify-center rounded-lg transition-all duration-200 border disabled:opacity-50 disabled:cursor-not-allowed',
           variants[variant],
           sizes[size],
           className
@@ -38,7 +42,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
         {children}
-      </button>
+      </motion.button>
     );
   }
 );

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import First5Blueprint from "./First5Blueprint";
 import {
   Download,
@@ -16,12 +17,12 @@ import {
   ChevronUp,
   Share2,
   Lock,
-  ExternalLink,
   FileText,
   MousePointerClick,
   Copy,
   Clock,
   CheckSquare,
+  AlertCircle,
 } from "lucide-react";
 
 import { Button } from "../components/ui/Button";
@@ -29,14 +30,84 @@ import { Card } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { useUser } from "../context/UserContext";
 import { UpgradeModal } from "../components/modals/UpgradeModal";
-import type { ReportDay } from "../lib/reportSchema";
-
-// 👉 USING MOCK DATA ONLY
-import { mockReport } from "../data/mockReport";
+import type { ReportDay, Report } from "../lib/reportSchema";
+import { transformN8nReportToReport } from "../lib/reportTransformer";
+import { generateReportPDF } from "../lib/pdfGenerator";
 
 export default function ReportPage() {
-  const report = mockReport;
-  return <ReportViewer report={report} id="demo" />;
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [report, setReport] = useState<Report | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      // Load from latest_report only
+      const latestReport = localStorage.getItem("latest_report") || localStorage.getItem("report");
+      
+      if (!latestReport) {
+        setError("No report found. Please generate a new report.");
+        setIsLoading(false);
+        return;
+      }
+
+      const parsed = JSON.parse(latestReport);
+      
+      // Validate that we have some data
+      if (typeof parsed !== "object" || !parsed) {
+        setError("Invalid report data format.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Use transformer to ensure data matches Report schema
+      const transformedReport = transformN8nReportToReport(parsed, undefined, id);
+
+      // Validate transformed report has essential data
+      if (!transformedReport.meta || !transformedReport.scores) {
+        setError("Report data is incomplete. Please generate a new report.");
+        setIsLoading(false);
+        return;
+      }
+
+      setReport(transformedReport);
+      setError(null);
+    } catch (err) {
+      console.error("Error loading report:", err);
+      setError("Failed to load report data. Please try generating a new report.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto"></div>
+          <p className="text-slate-400">Loading report...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !report) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="max-w-md p-8 text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto" />
+          <h2 className="text-xl font-bold text-white">Report Not Found</h2>
+          <p className="text-slate-400">{error || "Unable to load report data."}</p>
+          <Button onClick={() => navigate("/idea")}>
+            Generate New Report
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  const reportId = report.meta?.report_id || id || "unknown";
+  return <ReportViewer report={report} id={reportId} />;
 }
 
 export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
@@ -49,7 +120,12 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
     if (!userPlan || userPlan === "free") {
       setIsUpgradeModalOpen(true);
     } else {
-      alert("Downloading PDF…");
+      try {
+        generateReportPDF(report, id || "unknown");
+      } catch (error) {
+        console.error("Error generating PDF:", error);
+        alert("Failed to generate PDF. Please try again.");
+      }
     }
   };
 
@@ -146,71 +222,68 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
 
       {/* ========================= SECTION 1 — HEADER ========================= */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-  <div>
-    <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
-      <span>Report #{id}</span>
-      <span>•</span>
-      <span>{new Date(report.meta.created_at).toLocaleDateString()}</span>
-    </div>
-    <h1 className="text-2xl font-bold text-white">{report.meta.idea}</h1>
-  </div>
+        <div>
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500 mb-1">
+            <span>Killarity Engine Report</span>
+            <span>•</span>
+            <span>{new Date(report.meta.created_at).toLocaleDateString()}</span>
+          </div>
+          <h1 className="text-xl font-semibold text-slate-200">{report.meta.idea}</h1>
+        </div>
 
-  {/* RIGHT SIDE BUTTON GROUP */}
-  <div className="flex items-center gap-3">
-    
-    {/* Market Window + Trend Link */}
-    <div>
-      <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
-        ⚠ MARKET WINDOW CLOSING
+        <div className="flex items-center gap-3">
+          {report.urgency?.type === "rising" && (
+            <div>
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
+                ⚠ MARKET WINDOW CLOSING
+              </div>
+              <a
+                href={`https://trends.google.com/trends/explore?q=${encodeURIComponent(report.meta.idea)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-slate-400 hover:text-slate-300 mt-1 block"
+              >
+                Why is interest rising?
+              </a>
+            </div>
+          )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              const url = window.location.href;
+              if (navigator.share) {
+                await navigator.share({
+                  title: "KALLARITY ENGINE Report",
+                  text: "Check out this idea validation report",
+                  url,
+                });
+              } else {
+                await navigator.clipboard.writeText(url);
+                alert("Link copied!");
+              }
+            }}
+          >
+            <Share2 className="w-4 h-4" />
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePdfClick}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            PDF
+          </Button>
+
+        </div>
       </div>
-      <a
-        href={`https://trends.google.com/trends/explore?q=${encodeURIComponent(report.meta.idea)}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-xs text-slate-400 hover:text-slate-300 mt-1 block"
-      >
-        Why is interest rising?
-      </a>
-    </div>
-
-    {/* Share Button */}
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={async () => {
-        const url = window.location.href;
-
-        if (navigator.share) {
-          await navigator.share({
-            title: "KALLARITY ENGINE Report",
-            text: "Check out this idea validation report",
-            url,
-          });
-        } else {
-          await navigator.clipboard.writeText(url);
-          alert("Link copied!");
-        }
-      }}
-    >
-      <Share2 className="w-4 h-4" />
-    </Button>
-
-    {/* PDF Button */}
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={handlePdfClick}
-    >
-      <Download className="w-4 h-4 mr-2" />
-      PDF
-    </Button>
-  </div>
-</div>
 
       {/* ========================= SECTION 2 — VERDICT HERO ========================= */}
       <div className="grid lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 bg-gradient-to-br from-slate-900 to-slate-900/50">
-          <div className="flex flex-col md:flex-row gap-8">
+          <div className="flex flex-col md:flex-row gap-6">
             <div className="shrink-0 text-center md:text-left">
               <div className="w-20 h-20 rounded-full bg-slate-700 mx-auto md:mx-0 mb-3 overflow-hidden">
                 {report.icp.avatar_url ? (
@@ -221,41 +294,43 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-sky-500 to-purple-500 flex items-center justify-center text-white text-2xl font-bold">
-                    {report.icp.name.charAt(0)}
+                    {report.icp?.name?.charAt(0) || "?"}
                   </div>
                 )}
               </div>
-              <p className="font-bold text-white">{report.icp.name}</p>
-              <p className="text-xs text-slate-400">
+              <p className="font-bold text-white text-base">{report.icp.name}</p>
+              <p className="text-xs text-slate-400 mb-3">
                 {report.icp.demographics}
               </p>
-              <div className="mt-3 p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <p className="text-sm text-slate-300 italic">"{report.icp.quote}"</p>
+              <div className="p-2.5 bg-slate-950/50 rounded-lg border border-slate-800 mb-2">
+                <p className="text-xs text-slate-300 italic leading-snug">"{report.icp.quote}"</p>
               </div>
-              <div className="mt-2 p-2 bg-sky-500/10 border border-sky-500/20 rounded text-xs text-sky-400">
-                💡 Focus on this exact persona for your first 50 users
+              <div className="p-1.5 bg-sky-500/10 border border-sky-500/20 rounded text-xs text-sky-400">
+                💡 Focus on this persona
               </div>
             </div>
 
-            <div className="space-y-4 flex-1">
+            <div className="space-y-3 flex-1">
               <Badge
                 variant={
                   report.verdict.label === "GO HARD" ? "success" : "warning"
                 }
+                className="text-xs"
               >
-                VERDICT: {report.verdict.label}
+                {report.verdict.label}
               </Badge>
 
-              <h2 className="text-3xl font-bold text-white">
-                {report.verdict.headline}
+              <h2 className="text-xl font-semibold text-white leading-snug">
+               {report.verdict.headline}
               </h2>
 
-              <p className="text-slate-300 leading-relaxed">
-                {report.verdict.reason}
+              <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
+               {report.verdict.reason}
               </p>
 
-              <div className="flex gap-4 pt-2">
+              <div className="flex gap-3 pt-1">
                 <Button
+                  size="sm"
                   onClick={() =>
                     document
                       .getElementById("roadmap")
@@ -264,13 +339,12 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
                 >
                   Start 7-Day Launch
                 </Button>
-                <Button variant="ghost">View full details</Button>
+                <Button variant="ghost" size="sm">Details</Button>
               </div>
             </div>
           </div>
         </Card>
 
-        {/* ========================= SECTION 3 — 4 SCORE CARDS (GRID) ========================= */}
         <div className="grid grid-cols-2 gap-4">
           <ScoreCard title="Demand" score={report.scores.demand} />
           <ScoreCard title="Competition" score={report.scores.competition} />
@@ -290,28 +364,61 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-slate-400">Skills Match</span>
-                <span className="text-emerald-400 font-bold">90%</span>
+                <span className={`font-bold ${
+                  (report.founder_profile_fit?.skills_match || 0) > 80 ? 'text-emerald-400' :
+                  (report.founder_profile_fit?.skills_match || 0) > 50 ? 'text-amber-400' : 'text-red-400'
+                }`}>
+                  {report.founder_profile_fit?.skills_match || 0}%
+                </span>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500" style={{ width: "90%" }} />
+                <div 
+                  className={`h-full ${
+                    (report.founder_profile_fit?.skills_match || 0) > 80 ? 'bg-emerald-500' :
+                    (report.founder_profile_fit?.skills_match || 0) > 50 ? 'bg-amber-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${report.founder_profile_fit?.skills_match || 0}%` }} 
+                />
               </div>
             </div>
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-slate-400">Distribution Match</span>
-                <span className="text-amber-400 font-bold">45%</span>
+                <span className={`font-bold ${
+                  (report.founder_profile_fit?.distribution_match || 0) > 80 ? 'text-emerald-400' :
+                  (report.founder_profile_fit?.distribution_match || 0) > 50 ? 'text-amber-400' : 'text-red-400'
+                }`}>
+                  {report.founder_profile_fit?.distribution_match || 0}%
+                </span>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-500" style={{ width: "45%" }} />
+                <div 
+                  className={`h-full ${
+                    (report.founder_profile_fit?.distribution_match || 0) > 80 ? 'bg-emerald-500' :
+                    (report.founder_profile_fit?.distribution_match || 0) > 50 ? 'bg-amber-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${report.founder_profile_fit?.distribution_match || 0}%` }} 
+                />
               </div>
             </div>
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-slate-400">Monetization Match</span>
-                <span className="text-emerald-400 font-bold">80%</span>
+                <span className={`font-bold ${
+                  (report.founder_profile_fit?.monetization_match || 0) > 80 ? 'text-emerald-400' :
+                  (report.founder_profile_fit?.monetization_match || 0) > 50 ? 'text-amber-400' : 'text-red-400'
+                }`}>
+                  {report.founder_profile_fit?.monetization_match || 0}%
+                </span>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500" style={{ width: "80%" }} />
+                <div 
+                  className={`h-full ${
+                    (report.founder_profile_fit?.monetization_match || 0) > 80 ? 'bg-emerald-500' :
+                    (report.founder_profile_fit?.monetization_match || 0) > 50 ? 'bg-amber-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${report.founder_profile_fit?.monetization_match || 0}%` }} 
+                />
               </div>
             </div>
           </div>
@@ -324,15 +431,24 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
           </div>
           <div className="space-y-3">
             <div>
-              <div className="text-2xl font-bold text-white mb-1">48–72 hours</div>
+              <div className="text-2xl font-bold text-white mb-1">
+                {report.speed_to_validation?.time_to_signal || "48–72 hours"}
+              </div>
               <div className="text-xs text-slate-400">Time to Signal</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-white mb-1">7 days</div>
+              <div className="text-2xl font-bold text-white mb-1">
+                {report.speed_to_validation?.time_to_paying || "7 days"}
+              </div>
               <div className="text-xs text-slate-400">Time to Paying</div>
             </div>
             <div>
-              <Badge variant="success">Low Complexity</Badge>
+              <Badge variant={
+                report.speed_to_validation?.complexity?.toLowerCase().includes("low") ? "success" :
+                report.speed_to_validation?.complexity?.toLowerCase().includes("medium") ? "warning" : "warning"
+              }>
+                {report.speed_to_validation?.complexity || "Low Complexity"}
+              </Badge>
             </div>
           </div>
         </Card>
@@ -343,18 +459,45 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             <span className="font-bold">Growth Path Prediction</span>
           </div>
           <div className="space-y-2 text-sm">
-            <div className="p-2 bg-slate-950/50 rounded border border-slate-800">
-              <span className="text-emerald-400 font-semibold">Outreach:</span>{" "}
-              <span className="text-slate-300">High. Easy to DM.</span>
-            </div>
-            <div className="p-2 bg-slate-950/50 rounded border border-slate-800">
-              <span className="text-amber-400 font-semibold">Community:</span>{" "}
-              <span className="text-slate-300">Medium. Hard to self-promote.</span>
-            </div>
-            <div className="p-2 bg-slate-950/50 rounded border border-slate-800">
-              <span className="text-red-400 font-semibold">Paid:</span>{" "}
-              <span className="text-slate-300">Low. High CPC.</span>
-            </div>
+            {report.growth_path?.outreach && (
+              <div className="p-2 bg-slate-950/50 rounded border border-slate-800">
+                <span className={`font-semibold ${
+                  report.growth_path.outreach.level?.toLowerCase() === "high" ? "text-emerald-400" :
+                  report.growth_path.outreach.level?.toLowerCase() === "medium" ? "text-amber-400" : "text-red-400"
+                }`}>
+                  Outreach:
+                </span>{" "}
+                <span className="text-slate-300">
+                  {report.growth_path.outreach.level || "Medium"}. {report.growth_path.outreach.description || ""}
+                </span>
+              </div>
+            )}
+            {report.growth_path?.community && (
+              <div className="p-2 bg-slate-950/50 rounded border border-slate-800">
+                <span className={`font-semibold ${
+                  report.growth_path.community.level?.toLowerCase() === "high" ? "text-emerald-400" :
+                  report.growth_path.community.level?.toLowerCase() === "medium" ? "text-amber-400" : "text-red-400"
+                }`}>
+                  Community:
+                </span>{" "}
+                <span className="text-slate-300">
+                  {report.growth_path.community.level || "Medium"}. {report.growth_path.community.description || ""}
+                </span>
+              </div>
+            )}
+            {report.growth_path?.paid && (
+              <div className="p-2 bg-slate-950/50 rounded border border-slate-800">
+                <span className={`font-semibold ${
+                  report.growth_path.paid.level?.toLowerCase() === "high" ? "text-emerald-400" :
+                  report.growth_path.paid.level?.toLowerCase() === "medium" ? "text-amber-400" : "text-red-400"
+                }`}>
+                  Paid:
+                </span>{" "}
+                <span className="text-slate-300">
+                  {report.growth_path.paid.level || "Low"}. {report.growth_path.paid.description || ""}
+                </span>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -371,12 +514,12 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             </div>
 
             <div className="text-3xl font-bold text-white mb-1">
-              {report.market.search_volume.toLocaleString()}
+              {(report.market?.search_volume || 0).toLocaleString()}
             </div>
             <p className="text-xs text-slate-500 mb-4">via SerpAPI</p>
 
             <div className="space-y-2">
-              {report.market.top_queries.map((q: string, i: number) => (
+              {(report.market?.top_queries || []).map((q: string, i: number) => (
                 <a
                   key={i}
                   href={`https://www.google.com/search?q=${encodeURIComponent(q)}`}
@@ -407,8 +550,8 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
                   ))}
                 </div>
                 <div className="text-sm font-semibold text-emerald-400">
-                  {report.market.trend_direction === "rising" ? "+" : "-"}
-                  {report.market.trend_pct}% {report.market.trend_direction === "rising" ? "Rising" : "Falling"}
+                  {report.market?.trend_direction === "rising" ? "+" : "-"}
+                  {report.market?.trend_pct || 0}% {report.market?.trend_direction === "rising" ? "Rising" : "Falling"}
                 </div>
                 <a
                   href={`https://trends.google.com/trends/explore?q=${encodeURIComponent(report.meta.idea)}`}
@@ -422,9 +565,9 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             </Card>
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
               <div className="bg-slate-900 text-slate-200 text-xs px-2 py-1 rounded shadow-lg border border-slate-700 whitespace-nowrap">
-                {report.market.trend_pct > 0
+                {(report.market?.trend_pct || 0) > 0
                   ? `Rising: +${report.market.trend_pct}% this month`
-                  : report.market.trend_pct < 0
+                  : (report.market?.trend_pct || 0) < 0
                   ? `Dropping: ${report.market.trend_pct}% this month`
                   : "Flat: no momentum change"}
               </div>
@@ -437,7 +580,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
               <span className="font-bold">Competitors</span>
             </div>
             <div className="space-y-2">
-              {report.competition.top_competitors.map((comp: any, i: number) => (
+              {(report.competition?.top_competitors || []).map((comp: any, i: number) => (
                 <a
                   key={i}
                   href={comp.url || `https://${comp.domain}`}
@@ -445,9 +588,9 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
                   rel="noopener noreferrer"
                   className="bg-slate-950/50 px-3 py-2 rounded text-sm border border-slate-800 cursor-pointer hover:border-slate-600 transition-colors block"
                 >
-                  <div className="text-white font-semibold">{comp.domain}</div>
+                  <div className="text-white font-semibold">{comp.domain || "Unknown"}</div>
                   <div className={`text-xs text-slate-400 ${userPlan === "free" ? "blur-sm" : ""}`}>
-                    Traffic: {comp.traffic || "450k/mo"} • Strength: {(comp.strength * 100).toFixed(0)}%
+                    Traffic: {comp.traffic || "450k/mo"} • Strength: {comp.strength ? (comp.strength * 100).toFixed(0) : "0"}%
                   </div>
                 </a>
               ))}
@@ -472,12 +615,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             <span className="font-bold">Your Wedge to Win</span>
           </div>
           <ul className="space-y-2">
-            {[
-              "Micro ICP: Focus ONLY on React/Node devs first",
-              "Faster TTV: Show code compatibility score immediately",
-              "Simpler UX: No 'business plan' uploads, just GitHub link",
-              "Manual concierge: Hand-match the first 50 pairs",
-            ].map((item, i) => (
+            {(report.wedge_to_win || []).map((item: string, i: number) => (
               <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                 <CheckCircle className="w-4 h-4 text-purple-400 mt-0.5 shrink-0" />
                 <span>{item}</span>
@@ -492,11 +630,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             <span className="font-bold">ICP Psychology</span>
           </div>
           <ul className="space-y-2">
-            {[
-              "They are impatient and judge tools by their UI speed",
-              "Willing to post build updates publicly daily",
-              "Value code quality over marketing fluff",
-            ].map((item, i) => (
+            {(report.ICP_psychology_list || []).map((item: string, i: number) => (
               <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                 <Zap className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
                 <span>{item}</span>
@@ -514,7 +648,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             <span className="font-bold">Where This Idea Dies</span>
           </div>
           <ul className="space-y-2">
-            {report.risks.map((risk: string, i: number) => (
+            {(report.risks || []).map((risk: string, i: number) => (
               <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                 <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
                 <span>{risk}</span>
@@ -529,11 +663,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             <span className="font-bold">Founder Reality Check</span>
           </div>
           <ul className="space-y-2">
-            {[
-              "Your strength: fast execution and direct outreach clarity.",
-              "Your weakness: long technical builds—avoid them.",
-              "Your leverage: You can run 7-day tests faster than 95% founders.",
-            ].map((item, i) => (
+            {(report.founder_reality_check || []).map((item: string, i: number) => (
               <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                 <CheckCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                 <span>{item}</span>
@@ -553,48 +683,49 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
 
         <div className="space-y-4">
           {/* Day 1 - Special Card */}
-          {report.roadmap.days[0] && (() => {
-            const day1Tasks = [
-              "List 3 painful outcomes your user cares about.",
-              "Find 5 subreddits where they hang out.",
-              "Draft your \"Hated Competitor\" narrative.",
-            ];
-            const coldDmScript = "Hey [name], I'm testing a tiny tool that helps [ICP] avoid [pain]. Not selling anything, just want to see if I'm crazy. Mind if I send a 30s demo?";
+          {report.roadmap?.days?.[0] && (() => {
+            const day1 = report.roadmap.days[0];
+            const day1Tasks = day1.tasks && day1.tasks.length > 0 ? day1.tasks : [];
+            const day1Scripts = day1.scripts || [];
 
             return (
               <Card className="bg-slate-900/70 border-slate-700/60">
                 <div className="space-y-4">
                   <ul className="space-y-3">
-                    {day1Tasks.map((task, i) => (
+                    {day1Tasks.map((task: string, i: number) => (
                       <li key={i} className="flex items-start gap-3">
                         <CheckSquare className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
                         <span className="text-sm text-slate-300">{task}</span>
                       </li>
                     ))}
                   </ul>
-                  <div className="pt-4 border-t border-slate-800">
-                    <h4 className="text-sm font-bold text-white mb-3">COLD DM SCRIPT</h4>
-                    <div className="relative">
-                      <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800">
-                        <p className="text-sm text-slate-300 leading-relaxed">{coldDmScript}</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(coldDmScript);
-                        }}
-                        className="absolute top-2 right-2 p-2 hover:bg-slate-800 rounded transition-colors"
-                      >
-                        <Copy className="w-4 h-4 text-slate-400" />
-                      </button>
+                  {day1Scripts.length > 0 && (
+                    <div className="pt-4 border-t border-slate-800">
+                      <h4 className="text-sm font-bold text-white mb-3">COLD DM SCRIPT</h4>
+                      {day1Scripts.map((script: string, i: number) => (
+                        <div key={i} className="relative mb-3">
+                          <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800">
+                            <p className="text-sm text-slate-300 leading-relaxed">{script}</p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(script);
+                            }}
+                            className="absolute top-2 right-2 p-2 hover:bg-slate-800 rounded transition-colors"
+                          >
+                            <Copy className="w-4 h-4 text-slate-400" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  </div>
+                  )}
                 </div>
               </Card>
             );
           })()}
 
           {/* Days 2-7 */}
-          {report.roadmap.days.slice(1).map((day: ReportDay) => {
+          {(report.roadmap?.days || []).slice(1).map((day: ReportDay) => {
             const isLocked = day.locked && userPlan === "free";
             const isExpanded = expandedDay === day.day;
             const categoryMap: { [key: number]: string } = {
@@ -736,7 +867,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
               <div className="p-8 text-center">
                 <Lock className="w-12 h-12 text-slate-500 mx-auto mb-4" />
                 <p className="text-slate-400 mb-4">
-                  {report.blueprint.first_five_users.summary}
+                  {report.blueprint?.first_five_users?.summary || "Blueprint to get your first 5 paying users."}
                 </p>
                 <Button onClick={() => setIsUpgradeModalOpen(true)}>
                   Unlock Pro
@@ -761,44 +892,36 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
               <div>
                 <h4 className="text-lg font-bold text-white mb-3">Priority Channels</h4>
                 <div className="grid md:grid-cols-3 gap-3">
-                  <div className="p-3 bg-slate-950/50 rounded border border-slate-800">
-                    <div className="flex items-center gap-2 mb-1">
-                      <MousePointerClick className="w-4 h-4 text-sky-400" />
-                      <span className="text-sm font-semibold text-white">Direct Outreach</span>
+                  {(report.blueprint_pro_features?.priority_channels || []).map((channel: any, i: number) => (
+                    <div key={i} className="p-3 bg-slate-950/50 rounded border border-slate-800">
+                      <div className="flex items-center gap-2 mb-1">
+                        <MousePointerClick className="w-4 h-4 text-sky-400" />
+                        <span className="text-sm font-semibold text-white">{channel.name || "Channel"}</span>
+                      </div>
+                      <p className="text-xs text-slate-400">{channel.description || ""}</p>
                     </div>
-                    <p className="text-xs text-slate-400">High reply rate</p>
-                  </div>
-                  <div className="p-3 bg-slate-950/50 rounded border border-slate-800">
-                    <div className="flex items-center gap-2 mb-1">
-                      <ExternalLink className="w-4 h-4 text-emerald-400" />
-                      <span className="text-sm font-semibold text-white">Community Posts</span>
-                    </div>
-                    <p className="text-xs text-slate-400">Medium engagement</p>
-                  </div>
-                  <div className="p-3 bg-slate-950/50 rounded border border-slate-800">
-                    <div className="flex items-center gap-2 mb-1">
-                      <TrendingUp className="w-4 h-4 text-purple-400" />
-                      <span className="text-sm font-semibold text-white">SEO / Long-tail</span>
-                    </div>
-                    <p className="text-xs text-slate-400">Medium volume</p>
-                  </div>
+                  ))}
                 </div>
               </div>
 
               <div>
                 <h4 className="text-lg font-bold text-white mb-3">High-Reply Scripts</h4>
-                <div className="p-4 bg-slate-950/50 rounded border border-slate-800">
-                  <p className="text-sm text-slate-300">
-                    "Hey [Name], saw your post about [Topic]. I'm building a tool to solve [Problem] without [Pain]. Mind if I ask how you currently handle X?"
-                  </p>
-                </div>
+                {(report.blueprint_pro_features?.high_reply_scripts || []).map((script: string, i: number) => (
+                  <div key={i} className="p-4 bg-slate-950/50 rounded border border-slate-800 mb-3">
+                    <p className="text-sm text-slate-300 whitespace-pre-line">"{script}"</p>
+                  </div>
+                ))}
               </div>
 
               <div>
                 <h4 className="text-lg font-bold text-white mb-3">Pricing Sweet Spot</h4>
                 <div className="p-4 bg-slate-950/50 rounded border border-slate-800">
-                  <div className="text-2xl font-bold text-emerald-400 mb-1">$29/mo</div>
-                  <p className="text-sm text-slate-400">Entry point for early adopters</p>
+                  <div className="text-2xl font-bold text-emerald-400 mb-1">
+                    {report.blueprint_pro_features?.pricing_sweet_spot?.amount || "$29/mo"}
+                  </div>
+                  <p className="text-sm text-slate-400">
+                    {report.blueprint_pro_features?.pricing_sweet_spot?.description || "Entry point for early adopters"}
+                  </p>
                 </div>
               </div>
 
@@ -807,8 +930,12 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
                 <div className="p-4 bg-slate-950/50 rounded border border-slate-800 flex items-center gap-3">
                   <FileText className="w-5 h-5 text-sky-400" />
                   <div>
-                    <p className="text-sm font-semibold text-white">Download ICP List</p>
-                    <p className="text-xs text-slate-400">500+ qualified leads</p>
+                    <p className="text-sm font-semibold text-white">
+                      {report.blueprint_pro_features?.icp_csv_info?.title || "Download ICP List"}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {report.blueprint_pro_features?.icp_csv_info?.count || "500+ qualified leads"}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -816,7 +943,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
               <div>
                 <h4 className="text-lg font-bold text-white mb-3">Competitor Weaknesses</h4>
                 <ul className="space-y-2">
-                  {["Slow onboarding", "Complex pricing", "Poor mobile UX"].map((item, i) => (
+                  {(report.blueprint_pro_features?.competitor_weaknesses || report.competitor_weaknesses || []).map((item: string, i: number) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                       <Target className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
                       <span>{item}</span>
@@ -828,11 +955,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
               <div>
                 <h4 className="text-lg font-bold text-white mb-3">ICP Targets</h4>
                 <div className="space-y-2">
-                  {[
-                    "React/Node developers (primary)",
-                    "Indie hackers building SaaS",
-                    "Technical founders seeking co-founders",
-                  ].map((item, i) => (
+                  {(report.blueprint_pro_features?.icp_targets || []).map((item: string, i: number) => (
                     <div key={i} className="p-2 bg-slate-950/50 rounded border border-slate-800">
                       <div className="flex items-center gap-2">
                         <UserCheck className="w-4 h-4 text-sky-400" />
@@ -855,7 +978,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             <span className="font-bold">Biggest Risks</span>
           </div>
           <ul className="space-y-2">
-            {report.risks.map((risk: string, i: number) => (
+            {(report.risks || []).map((risk: string, i: number) => (
               <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                 <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
                 <span>{risk}</span>
@@ -870,7 +993,7 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
             <span className="font-bold">Potential Upside</span>
           </div>
           <ul className="space-y-2">
-            {report.upside.map((item: string, i: number) => (
+            {(report.upside || []).map((item: string, i: number) => (
               <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                 <TrendingUp className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
                 <span>{item}</span>

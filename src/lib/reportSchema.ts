@@ -5,6 +5,7 @@ export type ReportDay = {
   title: string;
   locked: boolean;
   tasks: string[];
+  scripts?: string[]; // Scripts for this day (especially Day 1)
 };
 
 export type FirstFiveUsersBlueprint = {
@@ -71,4 +72,36 @@ export type Report = {
 
   risks: string[];
   upside: string[];
+
+  // New fields from n8n
+  founder_profile_fit?: {
+    skills_match: number;
+    distribution_match: number;
+    monetization_match: number;
+  };
+
+  speed_to_validation?: {
+    time_to_signal: string;
+    time_to_paying: string;
+    complexity: string;
+  };
+
+  growth_path?: {
+    outreach: { level: string; description: string };
+    community: { level: string; description: string };
+    paid: { level: string; description: string };
+  };
+
+  wedge_to_win?: string[];
+  ICP_psychology_list?: string[];
+  founder_reality_check?: string[];
+
+  blueprint_pro_features?: {
+    priority_channels?: Array<{ name: string; description: string }>;
+    high_reply_scripts?: string[];
+    pricing_sweet_spot?: { amount: string; description: string };
+    icp_csv_info?: { title: string; count: string };
+    competitor_weaknesses?: string[];
+    icp_targets?: string[];
+  };
 };

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, Search, Globe, BrainCircuit } from 'lucide-react';
@@ -16,8 +16,21 @@ export const LoadingPage = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
+  const [reportId, setReportId] = useState<string | null>(null);
 
   useEffect(() => {
+    // Try to get report ID from localStorage
+    try {
+      const reportData = localStorage.getItem("latest_report");
+      if (reportData) {
+        const parsed = JSON.parse(reportData);
+        const id = parsed?.meta?.report_id || parsed?.id || "unknown";
+        setReportId(id);
+      }
+    } catch (err) {
+      console.error("Error reading report from localStorage:", err);
+    }
+
     // Simulate steps
     const stepInterval = setInterval(() => {
       setCurrentStep(prev => {
@@ -35,7 +48,7 @@ export const LoadingPage = () => {
       "Analyzing SimilarWeb traffic data...",
       "Calculating Founder-Market Fit score...",
       "Generating 7-day execution plan...",
-      "Finalizing report #12345..."
+      reportId ? `Finalizing report #${reportId}...` : "Finalizing report..."
     ];
 
     let logIndex = 0;
@@ -48,7 +61,8 @@ export const LoadingPage = () => {
 
     // Redirect
     const timeout = setTimeout(() => {
-      navigate('/report/12345');
+      const finalReportId = reportId || "unknown";
+      navigate(`/report/${finalReportId}`);
     }, 4500);
 
     return () => {
@@ -56,7 +70,7 @@ export const LoadingPage = () => {
       clearInterval(logInterval);
       clearTimeout(timeout);
     };
-  }, [navigate]);
+  }, [navigate, reportId]);
 
   return (
     <div className="max-w-2xl mx-auto py-16 space-y-8">

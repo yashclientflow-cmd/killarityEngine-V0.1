@@ -1,4 +1,3 @@
-import React from 'react';
 import { Check, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -34,7 +33,7 @@ export const PricingPage = () => {
             <Badge variant="neon">Most Popular</Badge>
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Founder</h3>
-          <div className="text-3xl font-bold text-white mb-6">$29<span className="text-sm font-normal text-slate-500">/mo</span></div>
+          <div className="text-3xl font-bold text-white mb-6">$5<span className="text-sm font-normal text-slate-500">/mo</span></div>
           <p className="text-sm text-slate-400 mb-6">For serious builders.</p>
           <Button className="w-full mb-8" onClick={upgradeToPro}>Upgrade to Pro</Button>
           <ul className="space-y-3 text-sm text-slate-300">
@@ -49,7 +48,7 @@ export const PricingPage = () => {
         {/* Lifer */}
         <Card className="border-purple-500/30 bg-slate-900/40">
           <h3 className="text-xl font-bold text-white mb-2">Lifer</h3>
-          <div className="text-3xl font-bold text-white mb-6">$290<span className="text-sm font-normal text-slate-500">/once</span></div>
+          <div className="text-3xl font-bold text-white mb-6">$29<span className="text-sm font-normal text-slate-500">/once</span></div>
           <p className="text-sm text-slate-400 mb-6">Pay once, own it forever.</p>
           <Button variant="secondary" className="w-full mb-8" onClick={upgradeToLifer}>Get Lifetime</Button>
           <ul className="space-y-3 text-sm text-slate-300">
