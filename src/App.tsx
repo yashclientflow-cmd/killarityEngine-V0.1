@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import { UserProvider } from "./context/UserContext";
 import { AppLayout } from "./components/layout/AppLayout";
 
@@ -29,6 +30,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
+        <Analytics />
       </BrowserRouter>
     </UserProvider>
   );
