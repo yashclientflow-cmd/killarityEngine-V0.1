@@ -60,7 +60,7 @@ export const IdeaInputPage = () => {
     try {
       // Direct call to n8n webhook (Vite doesn't support API routes like Next.js)
       const webhookURL = import.meta.env.VITE_N8N_WEBHOOK_URL || 
-        "https://yashxen414.app.n8n.cloud/webhook/report-nnn";
+        "https://yashufo.app.n8n.cloud/webhook/report-nnn";
 
       const fetchPromise = fetch(webhookURL, {
         method: "POST",
