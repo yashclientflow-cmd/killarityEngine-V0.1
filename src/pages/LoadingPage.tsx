@@ -59,10 +59,9 @@ export const LoadingPage = () => {
       }
     }, 400);
 
-    // Redirect
+    // Redirect to RealityCheckPage instead of ReportPage
     const timeout = setTimeout(() => {
-      const finalReportId = reportId || "unknown";
-      navigate(`/report/${finalReportId}`);
+      navigate('/reality-check');
     }, 4500);
 
     return () => {

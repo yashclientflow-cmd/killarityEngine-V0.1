@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { useUser } from '../context/UserContext';
 
 const steps = [
   { id: 1, title: "The Idea" },
@@ -13,12 +14,13 @@ const steps = [
 
 export const IdeaInputPage = () => {
   const navigate = useNavigate();
+  const { setFormData, setReportPayload } = useUser();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [showInterimOverlay, setShowInterimOverlay] = useState(false);
   const [overlayTextIndex, setOverlayTextIndex] = useState(0);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormDataState] = useState({
     idea: '',
     problem: '',
     icp: '',
@@ -58,47 +60,28 @@ export const IdeaInputPage = () => {
     const minDisplayTime = Promise.resolve().then(() => new Promise(resolve => setTimeout(resolve, 1500)));
 
     try {
-      // Direct call to n8n webhook (Vite doesn't support API routes like Next.js)
-      const webhookURL = import.meta.env.VITE_N8N_WEBHOOK_URL || 
-        "https://yashufo.app.n8n.cloud/webhook/report-nnn";
-
-      const fetchPromise = fetch(webhookURL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+      // Store original 8 form fields in context for later use after RealityCheck
+      setFormData({
+        idea: formData.idea,
+        problem: formData.problem,
+        icp: formData.icp,
+        role: formData.role,
+        hours: formData.hours,
+        budget: formData.budget,
+        skill: formData.skill,
+        audience: formData.audience,
       });
 
-      // Wait for both the API call and minimum display time
-      const [response] = await Promise.all([fetchPromise, minDisplayTime]);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const rawData = await response.json();
-
-      // Transform n8n response to match Report schema
-      const { transformN8nReportToReport } = await import("../lib/reportTransformer");
-      
-      // Generate a unique report ID
-      const generatedReportId = `rep_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      const transformedData = transformN8nReportToReport(
-        rawData,
-        formData.idea,
-        generatedReportId
-      );
-
-      // Save transformed report so ReportPage can load it
-      localStorage.setItem("latest_report", JSON.stringify(transformedData));
+      // Wait for minimum display time
+      await minDisplayTime;
 
       clearInterval(textInterval);
-      navigate('/loading'); // Continue the flow
+      navigate('/loading');
     } catch (err) {
       console.error("Submit error:", err);
       clearInterval(textInterval);
       setShowInterimOverlay(false);
-      alert(`Error sending data to backend: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -110,11 +93,16 @@ export const IdeaInputPage = () => {
   const handleNext = () => {
     if (currentStep < 3) {
       setCurrentStep(prev => prev + 1);
+    } else if (currentStep === 3) {
+      // Submit and go to loading/reality check flow
+      handleSubmit();
     }
   };
 
   const handleBack = () => {
-    if (currentStep > 1) setCurrentStep(prev => prev - 1);
+    if (currentStep > 1) {
+      setCurrentStep(prev => prev - 1);
+    }
   };
 
   return (
@@ -208,7 +196,7 @@ export const IdeaInputPage = () => {
                 <textarea 
                   className="w-full h-32 bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200 placeholder:text-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 transition-all"
                   value={formData.idea}
-                  onChange={(e) => setFormData({...formData, idea: e.target.value})}
+                  onChange={(e) => setFormDataState({...formData, idea: e.target.value})}
                   placeholder="AI tool that turns long voice notes into structured tasks."
                 />
                 <p className="mt-1.5 text-xs text-slate-500">Example: AI tool that turns long voice notes into structured tasks.</p>
@@ -220,7 +208,7 @@ export const IdeaInputPage = () => {
                   type="text"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200 placeholder:text-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 transition-all"
                   value={formData.problem}
-                  onChange={(e) => setFormData({...formData, problem: e.target.value})}
+                  onChange={(e) => setFormDataState({...formData, problem: e.target.value})}
                   placeholder="Teams waste 3–5 hours syncing messy client requirements."
                 />
                 <p className="mt-1.5 text-xs text-slate-500">Example: Teams waste 3–5 hours syncing messy client requirements.</p>
@@ -251,7 +239,7 @@ export const IdeaInputPage = () => {
                   type="text"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200 placeholder:text-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 transition-all"
                   value={formData.icp}
-                  onChange={(e) => setFormData({...formData, icp: e.target.value})}
+                  onChange={(e) => setFormDataState({...formData, icp: e.target.value})}
                   placeholder="Solo founders building SaaS with limited budget."
                 />
                 <p className="mt-1.5 text-xs text-slate-500">Example: Solo founders building SaaS with limited budget.</p>
@@ -263,7 +251,7 @@ export const IdeaInputPage = () => {
                   <select 
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200"
                     value={formData.role}
-                    onChange={(e) => setFormData({...formData, role: e.target.value})}
+                    onChange={(e) => setFormDataState({...formData, role: e.target.value})}
                   >
                     <option value="">Select...</option>
                     <option value="solo">Solo Founder</option>
@@ -277,7 +265,7 @@ export const IdeaInputPage = () => {
                   <select 
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200"
                     value={formData.hours}
-                    onChange={(e) => setFormData({...formData, hours: e.target.value})}
+                    onChange={(e) => setFormDataState({...formData, hours: e.target.value})}
                   >
                     <option value="">Select...</option>
                     <option value="5-10">5–10</option>
@@ -316,7 +304,7 @@ export const IdeaInputPage = () => {
                   type="range" min="0" max="5000" step="100"
                   className="w-full"
                   value={formData.budget}
-                  onChange={(e) => setFormData({...formData, budget: Number(e.target.value)})}
+                  onChange={(e) => setFormDataState({...formData, budget: Number(e.target.value)})}
                 />
               </div>
 
@@ -331,7 +319,7 @@ export const IdeaInputPage = () => {
                   type="range" min="0" max="100"
                   className="w-full"
                   value={formData.skill}
-                  onChange={(e) => setFormData({...formData, skill: Number(e.target.value)})}
+                  onChange={(e) => setFormDataState({...formData, skill: Number(e.target.value)})}
                 />
               </div>
 
@@ -349,7 +337,7 @@ export const IdeaInputPage = () => {
                           ? 'bg-sky-500/20 border-sky-500 text-sky-400'
                           : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                       }`}
-                      onClick={() => setFormData({...formData, audience: opt})}
+                      onClick={() => setFormDataState({...formData, audience: opt})}
                     >
                       {opt}
                     </motion.button>
@@ -374,10 +362,10 @@ export const IdeaInputPage = () => {
           <Button
             className="w-32"
             isLoading={isLoading}
-            onClick={currentStep === 3 ? handleSubmit : handleNext}
+            onClick={handleNext}
           >
             {currentStep === 3 ? (
-              <>Run Analysis <Sparkles className="w-4 h-4 ml-2" /></>
+              <>Analyze <Sparkles className="w-4 h-4 ml-2" /></>
             ) : (
               <>Next <ArrowRight className="w-4 h-4 ml-2" /></>
             )}

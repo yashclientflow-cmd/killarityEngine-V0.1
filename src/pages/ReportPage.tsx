@@ -220,6 +220,62 @@ export const ReportViewer = ({ report, id }: { report: any; id?: string }) => {
         onClose={() => setIsUpgradeModalOpen(false)}
       />
 
+      {/* ========================= REALITY CHECK — TOP BLOCK ========================= */}
+      {(() => {
+        try {
+          const realityCheckData = localStorage.getItem("reality_check_answers");
+          if (!realityCheckData) return null;
+          
+          const answers = JSON.parse(realityCheckData);
+          const allYes = answers.has_interest === true && answers.right_people === true && answers.paying_users === true;
+          const allNo = answers.has_interest === false && answers.right_people === false && answers.paying_users === false;
+          
+          let fear = "No clear pattern detected in your responses.";
+          let nextMove = "Review your assumptions and try again.";
+          
+          if (allYes) {
+            fear = "You are moving too slowly and competitors might catch up.";
+            nextMove = "Launch the 7-day blueprint today. Scale what already works.";
+          } else if (allNo) {
+            fear = "You are burning time building something nobody wants.";
+            nextMove = "Kill this idea now. Find a stronger wedge to test.";
+          } else if (answers.has_interest === true && answers.right_people === true && answers.paying_users === false) {
+            fear = "You have an audience but nobody is pulling out their wallet.";
+            nextMove = "Run a paid trial immediately. Lock in your first customer.";
+          } else if (answers.has_interest === true && answers.right_people === false) {
+            fear = "You are getting validation from people who will never pay.";
+            nextMove = "Stop talking to these users. Find your real buyers.";
+          } else if (answers.has_interest === false) {
+            fear = "Your idea is invisible and strangers do not care.";
+            nextMove = "Completely rebrand your pitch or abandon this idea.";
+          } else if (answers.has_interest === true && answers.right_people === true) {
+            fear = "Your buyers are interested but nobody has paid yet.";
+            nextMove = "Put up a paywall today. Charge something this week.";
+          }
+          
+          return (
+            <div className="space-y-4">
+              {/* FEAR - Bold red sentence */}
+              <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-6">
+                <p className="text-xl md:text-2xl font-black text-red-400 leading-tight">
+                  {fear}
+                </p>
+              </div>
+              
+              {/* NEXT MOVE - Bold neon-green command */}
+              <div className="bg-emerald-500/10 border border-emerald-500/50 rounded-lg p-6">
+                <p className="text-xl md:text-2xl font-black text-emerald-400 leading-tight">
+                  {nextMove}
+                </p>
+              </div>
+            </div>
+          );
+        } catch (err) {
+          console.error("Error loading reality check data:", err);
+          return null;
+        }
+      })()}
+
       {/* ========================= SECTION 1 — HEADER ========================= */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>

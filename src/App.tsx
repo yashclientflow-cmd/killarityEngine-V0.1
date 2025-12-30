@@ -6,6 +6,7 @@ import LandingPage from "./pages/LandingPage";
 import IdeaInputPage from "./pages/IdeaInputPage";
 import LoadingPage from "./pages/LoadingPage";
 import ReportPage from "./pages/ReportPage";
+import RealityCheckPage from "./pages/RealityCheckPage";
 import SavedReportsPage from "./pages/SavedReportsPage";
 import PricingPage from "./pages/PricingPage";
 import AccountPage from "./pages/AccountPage";
@@ -22,6 +23,7 @@ function App() {
             <Route path="/idea" element={<IdeaInputPage />} />
             <Route path="/start" element={<IdeaInputPage />} />
             <Route path="/loading" element={<LoadingPage />} />
+            <Route path="/reality-check" element={<RealityCheckPage />} />
             <Route path="/report/:id" element={<ReportPage />} />
             <Route path="/saved" element={<SavedReportsPage />} />
             <Route path="/pricing" element={<PricingPage />} />

@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  const webhookURL = "https://yashufo.app.n8n.cloud/webhook/report-nnn";
+  const webhookURL = "https://yashufo.app.n8n.cloud/webhook/report-nbn";
 
   try {
     const response = await fetch(webhookURL, {
